@@ -78,39 +78,59 @@ export class Game {
 
         this.scene.add(dirLight);
 
-        // 5. Add Floor (Procedural Tiles)
+        // 5. Add Floor (Corporate Office Tiles)
         const tileSize = 512;
         const canvas = document.createElement('canvas');
         canvas.width = tileSize;
         canvas.height = tileSize;
         const context = canvas.getContext('2d');
 
-        // Background (Concrete)
-        context.fillStyle = '#2a2a2a';
+        // Background (Corporate Bluish-Gray)
+        context.fillStyle = '#2a2a35';
         context.fillRect(0, 0, tileSize, tileSize);
 
-        // Grid Lines
-        context.strokeStyle = '#3a3a3a';
-        context.lineWidth = 4;
-        context.beginPath();
-        // Vertical lines
-        for (let i = 0; i <= tileSize; i += 64) {
-            context.moveTo(i, 0);
-            context.lineTo(i, tileSize);
-        }
-        // Horizontal lines
-        for (let i = 0; i <= tileSize; i += 64) {
-            context.moveTo(0, i);
-            context.lineTo(tileSize, i);
-        }
-        context.stroke();
+        // Draw 64x64px tiles with lighter borders
+        const tileCount = tileSize / 64;
+        for (let x = 0; x < tileCount; x++) {
+            for (let y = 0; y < tileCount; y++) {
+                const px = x * 64;
+                const py = y * 64;
 
-        // Add some random noise/stains for realism
-        for (let i = 0; i < 50; i++) {
+                // Tile base
+                context.fillStyle = '#2a2a35';
+                context.fillRect(px, py, 64, 64);
+
+                // Lighter border to simulate carpet tiles
+                context.strokeStyle = '#3a3a45';
+                context.lineWidth = 2;
+                context.strokeRect(px, py, 64, 64);
+
+                // Add subtle texture variation
+                if (Math.random() > 0.7) {
+                    context.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.02})`;
+                    context.fillRect(px + 2, py + 2, 60, 60);
+                }
+            }
+        }
+
+        // Add coffee stains (dark circles) randomly
+        for (let i = 0; i < 30; i++) {
+            const x = Math.random() * tileSize;
+            const y = Math.random() * tileSize;
+            const radius = Math.random() * 8 + 4;
+
+            context.fillStyle = `rgba(40, 30, 20, ${Math.random() * 0.3 + 0.2})`;
+            context.beginPath();
+            context.arc(x, y, radius, 0, Math.PI * 2);
+            context.fill();
+        }
+
+        // Add some random dirt/wear marks
+        for (let i = 0; i < 20; i++) {
             context.fillStyle = `rgba(0, 0, 0, ${Math.random() * 0.1})`;
             const x = Math.random() * tileSize;
             const y = Math.random() * tileSize;
-            const size = Math.random() * 20 + 10;
+            const size = Math.random() * 15 + 5;
             context.fillRect(x, y, size, size);
         }
 
@@ -174,11 +194,26 @@ export class Game {
         if (this.player) {
             this.player.update(dt, this.inputHandler, this.officeLevel);
 
+            // --- ECONOMY UPDATE ---
+            // 1. Burn Rate: -$10/sec
+            this.player.cash -= 10 * dt;
+
+            // 2. Revenue: + (Users * 0.5)/sec
+            // Users = this.player.xp
+            const revenue = (this.player.xp * 0.5) * dt;
+            this.player.cash += revenue;
+
+
             // Camera Follow
             const playerPos = this.player.getPosition();
             this.camera.position.x = playerPos.x;
             this.camera.position.z = playerPos.z + 20;
             this.camera.lookAt(playerPos.x, 0, playerPos.z);
+
+            // Update Office Level (animations)
+            if (this.officeLevel) {
+                this.officeLevel.update(dt);
+            }
 
             // Update Spawner
             if (this.spawner) {
@@ -240,14 +275,17 @@ export class Game {
             { name: "Series A Funding", icon: "💰", desc: "Recibe $5000 Cash" },
             { name: "Viral Marketing", icon: "🔥", desc: "Aumenta el daño (+50% Damage)" },
             { name: "Referral Program", icon: "🤝", desc: "Enemigos explotan al morir (Chain Reaction)" },
-            { name: "NFT Drop", icon: "💎", desc: "Explosión masiva cada 10s (Passive Nuke)" }
+            { name: "Referral Program", icon: "🤝", desc: "Enemigos explotan al morir (Chain Reaction)" },
+            { name: "NFT Drop", icon: "💎", desc: "Explosión masiva cada 10s (Passive Nuke)" },
+            { name: "Hiring Spree", icon: "👶", desc: "Genera un Junior Dev cada 5s" },
+            { name: "Pivote", icon: "🔄", desc: "Cambia tu arma aleatoriamente (Riesgo/Recompensa)" }
         ];
 
-        // Show all options for now so user can test everything
-        // const shuffled = options.sort(() => 0.5 - Math.random());
-        // const selectedOptions = shuffled.slice(0, 3);
+        // Show 3 random unique options
+        const shuffled = options.sort(() => 0.5 - Math.random());
+        const selectedOptions = shuffled.slice(0, 3);
 
-        this.uiManager.showPitchRound(options, (selected) => {
+        this.uiManager.showPitchRound(selectedOptions, (selected) => {
             this.applyUpgrade(selected);
             this.state = 'playing';
             this.loop();
@@ -268,6 +306,10 @@ export class Game {
             this.combat.referralProgramEnabled = true;
         } else if (upgrade.name === "NFT Drop") {
             this.combat.enableNFTDrop();
+        } else if (upgrade.name === "Hiring Spree") {
+            this.combat.enableHiringSpree();
+        } else if (upgrade.name === "Pivote") {
+            this.combat.activatePivote();
         }
     }
 

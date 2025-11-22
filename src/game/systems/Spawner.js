@@ -56,11 +56,14 @@ export class Spawner {
         if (gameTime < 30) { // Seed Stage
             if (rand > 0.9) type = 'troll';
         } else if (gameTime < 60) { // Series A
-            if (rand > 0.7) type = 'troll';
-            if (rand > 0.95) type = 'client';
+            if (rand > 0.6) type = 'troll';
+            if (rand > 0.85) type = 'client';
+            if (rand > 0.95) type = 'toxic_vc'; // Rare early
         } else { // Series B+
-            if (rand > 0.5) type = 'troll';
-            if (rand > 0.8) type = 'client';
+            if (rand > 0.4) type = 'troll';
+            if (rand > 0.7) type = 'client';
+            if (rand > 0.85) type = 'toxic_vc';
+            if (rand > 0.95) type = 'regulator';
         }
 
         const enemy = new Enemy(this.scene, spawnPos, type);

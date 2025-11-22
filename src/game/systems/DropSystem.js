@@ -7,8 +7,15 @@ export class DropSystem {
         this.drops = [];
     }
 
-    spawnDrop(position) {
-        const drop = new UserEntity(this.scene, position);
+    spawnDrop(position, player) {
+        // Calculate value based on Hype
+        // 50 Hype = 10 Users (Base)
+        // 100 Hype = 20 Users
+        // 0 Hype = 0 (but clamped to 1)
+        let value = Math.floor(10 * (player.hype / 50));
+        value = Math.max(1, value); // Minimum 1 user
+
+        const drop = new UserEntity(this.scene, position, value);
         this.drops.push(drop);
     }
 
@@ -26,6 +33,12 @@ export class DropSystem {
                 if (player.gainXP(drop.value)) {
                     leveledUp = true;
                 }
+
+                // Feedback for High Conversion
+                if (drop.value > 15) {
+                    console.log("¡Alta Conversión! +" + drop.value + " Usuarios");
+                }
+
                 this.drops.splice(i, 1);
             }
         }

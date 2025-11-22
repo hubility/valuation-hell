@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Projectile } from '../entities/Projectile.js';
+import { JuniorDev } from '../entities/JuniorDev.js';
 
 export class Combat {
     constructor(scene) {
@@ -23,6 +24,41 @@ export class Combat {
         this.nftDropEnabled = false;
         this.nftDropTimer = 0;
         this.nftDropCooldown = 10.0;
+
+        // Hiring Spree
+        this.minions = [];
+        this.hiringSpreeEnabled = false;
+        this.hiringSpreeTimer = 0;
+        this.hiringSpreeInterval = 5.0;
+    }
+
+    enableHiringSpree() {
+        this.hiringSpreeEnabled = true;
+        this.hiringSpreeTimer = this.hiringSpreeInterval; // Trigger immediately or soon
+    }
+
+    activatePivote() {
+        const weapons = ['basic', 'fan', 'laser', 'cash_flamethrower'];
+        // Random weapon, risk of getting basic even if you had fan
+        const randomIndex = Math.floor(Math.random() * weapons.length);
+        this.weaponType = weapons[randomIndex];
+        console.log("Pivote activated! New weapon:", this.weaponType);
+
+        // Adjust fire rates based on weapon
+        if (this.weaponType === 'cash_flamethrower') {
+            this.shootRate = 0.1; // Very fast
+            this.manualShootRate = 0.05;
+        } else if (this.weaponType === 'laser') {
+            this.shootRate = 1.5;
+            this.manualShootRate = 0.5;
+        } else if (this.weaponType === 'fan') {
+            this.shootRate = 2.0;
+            this.manualShootRate = 0.2;
+        } else {
+            // Basic
+            this.shootRate = 2.0;
+            this.manualShootRate = 0.2;
+        }
     }
 
     enableNFTDrop() {
@@ -40,6 +76,40 @@ export class Combat {
             if (this.nftDropTimer >= this.nftDropCooldown) {
                 this.nftDropTimer = 0;
                 this.triggerNFTDrop(player, enemies, particleSystem, floatingTextManager);
+            }
+        }
+
+        // Hiring Spree Logic
+        if (this.hiringSpreeEnabled) {
+            this.hiringSpreeTimer += dt;
+            if (this.hiringSpreeTimer >= this.hiringSpreeInterval) {
+                this.hiringSpreeTimer = 0;
+                const minion = new JuniorDev(this.scene, player.getPosition());
+                this.minions.push(minion);
+                if (floatingTextManager) {
+                    floatingTextManager.showDamage(player.getPosition(), "HIRED!", 0x00ff00);
+                }
+            }
+        }
+
+        // Update Minions
+        for (let i = this.minions.length - 1; i >= 0; i--) {
+            const minion = this.minions[i];
+            minion.update(dt, enemies, player.getPosition(), particleSystem, (origin, direction) => {
+                const proj = new Projectile(this.scene, origin, direction);
+                proj.speed = 20;
+                proj.damage = minion.damage;
+
+                // Clone material to avoid affecting all player projectiles
+                if (proj.mesh && proj.mesh.material) {
+                    proj.mesh.material = proj.mesh.material.clone();
+                    proj.mesh.material.color.setHex(0x00ffff); // Cyan
+                    proj.mesh.material.emissive.setHex(0x00ffff);
+                }
+                this.projectiles.push(proj);
+            });
+            if (minion.isDead) {
+                this.minions.splice(i, 1);
             }
         }
 
@@ -111,7 +181,7 @@ export class Combat {
                         }
 
                         if (enemy.isDead) {
-                            dropSystem.spawnDrop(enemy.getPosition());
+                            dropSystem.spawnDrop(enemy.getPosition(), player);
                             // Death Explosion
                             if (particleSystem) {
                                 particleSystem.emit(enemy.getPosition(), enemy.color || 0xff0000, 10);
@@ -156,6 +226,11 @@ export class Combat {
                 if (enemy.type === 'troll') {
                     // Trolls damage Hype
                     player.takeHypeDamage(enemy.damage * dt);
+                } else if (enemy.type === 'toxic_vc') {
+                    // Toxic VC damages Cash AND Equity
+                    player.takeDamage(enemy.damage * dt);
+                    // Reduce equity by 2% per second of contact
+                    player.loseEquityPercent(2 * dt);
                 } else {
                     // Others damage Cash
                     player.takeDamage(enemy.damage * dt);
@@ -247,6 +322,35 @@ export class Combat {
                 if (isManual) proj.speed = 20;
                 this.projectiles.push(proj);
             });
+        } else if (this.weaponType === 'laser') {
+            // Laser: Fast, Blue, Penetrating (maybe? for now just simple fast projectile)
+            const proj = new Projectile(this.scene, origin, direction);
+            proj.speed = 40; // Very fast
+            proj.damage = 40;
+            proj.color = 0x0000ff; // Blue
+            if (proj.mesh && proj.mesh.material) proj.mesh.material.color.setHex(0x0000ff);
+            this.projectiles.push(proj);
+
+        } else if (this.weaponType === 'cash_flamethrower') {
+            // Flamethrower: Short range, spread, high rate
+            const spread = 0.3;
+            const dir = direction.clone();
+            dir.x += (Math.random() - 0.5) * spread;
+            dir.z += (Math.random() - 0.5) * spread;
+            dir.normalize();
+
+            const proj = new Projectile(this.scene, origin, dir);
+            proj.speed = 15;
+            proj.damage = 10; // Low damage per hit
+            proj.color = 0x00ff00; // Green cash fire
+            if (proj.mesh && proj.mesh.material) proj.mesh.material.color.setHex(0x00ff00);
+
+            // Short lifetime for flamethrower effect
+            // We might need to add lifetime to Projectile or just let it fly
+            // For now, standard projectile logic applies
+
+            this.projectiles.push(proj);
+
         } else {
             // Basic MVP
             const proj = new Projectile(this.scene, origin, direction);

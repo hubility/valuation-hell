@@ -13,6 +13,12 @@ export class UIManager {
         this.usersDisplay.innerText = "👥 0 Users";
         document.getElementById('hud').appendChild(this.usersDisplay);
 
+        // Create Valuation Display
+        this.valuationDisplay = document.createElement('div');
+        this.valuationDisplay.style.cssText = "font-size: 24px; color: #FFD700; font-weight: bold; text-align: center; margin-top: 10px;";
+        this.valuationDisplay.innerText = "$0";
+        document.getElementById('hud').appendChild(this.valuationDisplay);
+
         this.timerDisplay = document.getElementById('timer-display');
 
         this.startScreen = document.getElementById('start-screen');
@@ -48,6 +54,18 @@ export class UIManager {
         this.equityDisplay.innerText = `📊 ${player.equity}%`;
         this.hypeDisplay.innerText = `🔥 ${player.hype} | LVL ${player.level}`;
         this.usersDisplay.innerText = `👥 ${Math.floor(player.xp)} Users`;
+
+        // Update Valuation
+        const valuation = player.getValuation();
+        let valStr = "";
+        if (valuation >= 1000000) {
+            valStr = `$${(valuation / 1000000).toFixed(1)}M`;
+        } else if (valuation >= 1000) {
+            valStr = `$${(valuation / 1000).toFixed(1)}k`;
+        } else {
+            valStr = `$${Math.floor(valuation)}`;
+        }
+        this.valuationDisplay.innerText = `VALUATION: ${valStr}`;
 
         const mode = combat.autoFireEnabled ? "AUTO" : "MANUAL";
         this.hypeDisplay.innerText += ` | ${mode}`;

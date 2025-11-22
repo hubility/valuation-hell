@@ -9,6 +9,22 @@ const matUser = new THREE.MeshStandardMaterial({
     metalness: 0.5
 });
 
+const matUserGold = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    emissive: 0xffaa00,
+    emissiveIntensity: 0.8,
+    roughness: 0.2,
+    metalness: 0.8
+});
+
+const matUserGrey = new THREE.MeshStandardMaterial({
+    color: 0x555555,
+    emissive: 0x333333,
+    emissiveIntensity: 0.5,
+    roughness: 0.5,
+    metalness: 0.2
+});
+
 const matRing = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
 
 const geoHead = new THREE.SphereGeometry(0.25, 8, 8); // Reduced segments
@@ -16,29 +32,42 @@ const geoBody = new THREE.CapsuleGeometry(0.25, 0.2, 4, 8);
 const geoRing = new THREE.TorusGeometry(0.6, 0.05, 6, 16); // Reduced segments
 
 export class UserEntity {
-    constructor(scene, position) {
+    constructor(scene, position, value = 10) {
         this.scene = scene;
         this.mesh = null;
         this.isCollected = false;
-        this.value = 10; // XP Value
+        this.value = value; // XP Value
 
         this.init(position);
     }
 
     init(position) {
+        // Determine material and scale based on value
+        let material = matUser;
+        let scale = 1.0;
+
+        if (this.value > 15) {
+            material = matUserGold;
+            scale = 1.5;
+        } else if (this.value < 5) {
+            material = matUserGrey;
+            scale = 0.8;
+        }
+
         // Create a "User Avatar" icon (Head + Shoulders)
         this.mesh = new THREE.Group();
         this.mesh.position.copy(position);
         this.mesh.position.y = 1.0;
+        this.mesh.scale.setScalar(scale);
         this.scene.add(this.mesh);
 
         // Head
-        const head = new THREE.Mesh(geoHead, matUser);
+        const head = new THREE.Mesh(geoHead, material);
         head.position.y = 0.3;
         this.mesh.add(head);
 
         // Shoulders/Body
-        const body = new THREE.Mesh(geoBody, matUser);
+        const body = new THREE.Mesh(geoBody, material);
         body.rotation.z = Math.PI / 2; // Horizontal shoulders
         body.position.y = -0.1;
         this.mesh.add(body);

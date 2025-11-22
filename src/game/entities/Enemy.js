@@ -1,20 +1,7 @@
 import * as THREE from 'three';
 
-// --- Shared Geometries (Optimization) ---
-const geoInternBody = new THREE.BoxGeometry(0.5, 0.6, 0.3);
-const geoInternHead = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-const geoPropeller = new THREE.BoxGeometry(0.4, 0.05, 0.05);
-
-const geoClientBody = new THREE.BoxGeometry(0.6, 0.9, 0.4);
-const geoClientHead = new THREE.BoxGeometry(0.35, 0.35, 0.35);
-const geoBriefcase = new THREE.BoxGeometry(0.1, 0.3, 0.4);
-
-const geoTrollBody = new THREE.DodecahedronGeometry(0.4);
-const geoTrollHead = new THREE.BoxGeometry(0.25, 0.25, 0.3);
-
-const geoBossBody = new THREE.BoxGeometry(1.5, 2, 1);
-const geoBossHead = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-const geoBossWing = new THREE.BoxGeometry(2, 0.1, 1);
+// Vector temporal reutilizable para cálculos de movimiento (Evita Garbage Collection)
+const _tempVec = new THREE.Vector3();
 
 export class Enemy {
     constructor(scene, position, type = 'intern') {
@@ -25,13 +12,16 @@ export class Enemy {
         // Default Stats
         this.hp = 10;
         this.speed = 5;
-        this.damage = 10; // Cash damage per second
+        this.damage = 10;
         this.isDead = false;
 
         // Shooting
         this.canShoot = false;
         this.shootTimer = 0;
         this.shootRate = 2.0;
+
+        // Animation State
+        this.animOffset = Math.random() * 100;
 
         this.configureType();
         this.init(position);
@@ -41,28 +31,40 @@ export class Enemy {
         switch (this.type) {
             case 'troll':
                 this.hp = 5;
-                this.speed = 9; // Fast
+                this.speed = 7; // Rápido y molesto
                 this.damage = 5;
-                this.scale = 0.5;
+                this.scale = 0.8;
+                this.floating = true; // Vuela
                 break;
             case 'client':
-                this.hp = 150; // Tanky
-                this.speed = 1.5; // Slow
-                this.damage = 100;
-                this.canShoot = true; // Clients shoot!
+                this.hp = 100; // Tanque
+                this.speed = 2; // Lento
+                this.damage = 50;
+                this.canShoot = true; // Lanza "Scope Creep"
                 break;
             case 'boss':
-                this.hp = 500; // Boss HP
-                this.speed = 2.0;
+                this.hp = 500;
+                this.speed = 2.5;
                 this.damage = 100;
                 this.attackCooldown = 0;
                 this.maxAttackCooldown = 3.0;
                 break;
+            case 'toxic_vc':
+                this.hp = 15;
+                this.speed = 9; // Muy rápido
+                this.damage = 15;
+                break;
+            case 'regulator':
+                this.hp = 300; // Tanque masivo
+                this.speed = 1.5; // Muy lento
+                this.damage = 40;
+                this.scale = 1.2;
+                break;
             case 'intern':
             default:
-                this.hp = 30;
-                this.speed = 3.5;
-                this.damage = 50;
+                this.hp = 20;
+                this.speed = 4;
+                this.damage = 10;
                 break;
         }
     }
@@ -72,301 +74,315 @@ export class Enemy {
         this.mesh.position.copy(position);
         this.scene.add(this.mesh);
 
+        // Paleta de Colores Común
+        this.colors = {
+            skin: 0xffdbac,
+            suit: 0x2c3e50,
+            shirt: 0xffffff,
+            troll: 0x1da1f2, // Twitter Blue
+            coffee: 0x6f4e37,
+            cup: 0xffffff,
+            toxic: 0x00ff00, // Toxic Green
+            regulator: 0x000080 // Navy Blue
+        };
+
         switch (this.type) {
             case 'intern': this.createIntern(); break;
             case 'troll': this.createTroll(); break;
             case 'client': this.createClient(); break;
             case 'boss': this.createBoss(); break;
+            case 'toxic_vc': this.createToxicVC(); break;
+            case 'regulator': this.createRegulator(); break;
             default: this.createIntern(); break;
         }
     }
 
+    // 1. EL BECARIO (Coffee Zombie)
+    // Aspecto: Ojeras, encorvado, sosteniendo café gigante
     createIntern() {
-        // Unique materials to allow flashing without affecting others
-        const matBody = new THREE.MeshStandardMaterial({ color: 0xff4444 });
-        const matHead = new THREE.MeshStandardMaterial({ color: 0xffccaa });
-        const matProp = new THREE.MeshStandardMaterial({ color: 0xffff00 });
+        const matSkin = new THREE.MeshStandardMaterial({ color: 0xdddddd, flatShading: true }); // Pálido
+        const matClothes = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, flatShading: true }); // Ropa gris triste
+        const matCoffee = new THREE.MeshStandardMaterial({ color: this.colors.coffee, flatShading: true });
+        const matCup = new THREE.MeshStandardMaterial({ color: this.colors.cup, flatShading: true });
 
-        const body = new THREE.Mesh(geoInternBody, matBody);
-        body.position.y = 0.3;
+        // Cuerpo (Encorvado)
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), matClothes);
+        body.position.y = 0.5;
+        body.rotation.x = 0.2; // Inclinado hacia adelante
         body.castShadow = true;
         this.mesh.add(body);
 
-        const head = new THREE.Mesh(geoInternHead, matHead);
-        head.position.y = 0.5;
-        head.castShadow = true;
+        // Cabeza
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), matSkin);
+        head.position.set(0, 0.4, 0.1);
         body.add(head);
 
-        this.propeller = new THREE.Mesh(geoPropeller, matProp);
-        this.propeller.position.y = 0.2;
-        head.add(this.propeller);
+        // Ojos (Rojos de cansancio)
+        const eyeGeo = new THREE.BoxGeometry(0.08, 0.05, 0.05);
+        const matEye = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const eyeL = new THREE.Mesh(eyeGeo, matEye);
+        eyeL.position.set(0.1, 0, 0.18);
+        head.add(eyeL);
+        const eyeR = new THREE.Mesh(eyeGeo, matEye);
+        eyeR.position.set(-0.1, 0, 0.18);
+        head.add(eyeR);
+
+        // Brazos (Sosteniendo café)
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 0.1), matClothes);
+        arm.position.set(0.25, 0, 0.1);
+        arm.rotation.x = -1.0; // Levantado
+        body.add(arm);
+
+        const armL = arm.clone();
+        armL.position.set(-0.25, 0, 0.1);
+        body.add(armL);
+
+        // Taza de Café Gigante
+        const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.1, 0.3, 8), matCup);
+        cup.position.set(0, -0.2, 0.2); // En las manos
+        cup.rotation.x = 1.5; // Vertical relativo al mundo
+        arm.add(cup);
+
+        // Líquido
+        const liquid = new THREE.Mesh(new THREE.CircleGeometry(0.13, 8), matCoffee);
+        liquid.rotation.x = -Math.PI / 2;
+        liquid.position.y = 0.15;
+        cup.add(liquid);
+
+        this.bodyRef = body; // Referencia para animar tembleque
     }
 
-    createClient() {
-        const matBody = new THREE.MeshStandardMaterial({ color: 0x4b0082 });
-        const matHead = new THREE.MeshStandardMaterial({ color: 0xffccaa });
-        const matCase = new THREE.MeshStandardMaterial({ color: 0x331100 });
-
-        const body = new THREE.Mesh(geoClientBody, matBody);
-        body.position.y = 0.45;
-        body.castShadow = true;
-        this.mesh.add(body);
-
-        const head = new THREE.Mesh(geoClientHead, matHead);
-        head.position.y = 0.65;
-        head.castShadow = true;
-        body.add(head);
-
-        const briefcase = new THREE.Mesh(geoBriefcase, matCase);
-        briefcase.position.set(0.4, 0, 0);
-        briefcase.castShadow = true;
-        body.add(briefcase);
-    }
-
+    // 2. EL TROLL (Pájaro Azul del Odio)
+    // Aspecto: Geometría angular azul, alas, pico
     createTroll() {
-        const matBody = new THREE.MeshStandardMaterial({ color: 0x00aa00 });
+        const matBlue = new THREE.MeshStandardMaterial({ color: this.colors.troll, roughness: 0.4, flatShading: true });
+        const matBeak = new THREE.MeshStandardMaterial({ color: 0xffaa00, flatShading: true });
+        const matWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true });
 
-        const body = new THREE.Mesh(geoTrollBody, matBody);
-        body.position.y = 0.3;
+        // Cuerpo (Icosaedro para ser redondo pero "low poly")
+        const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 0), matBlue);
+        body.position.y = 1.0; // Flotando
         body.castShadow = true;
         this.mesh.add(body);
 
-        const head = new THREE.Mesh(geoTrollHead, matBody);
-        head.position.set(0, 0.3, 0.2);
-        head.castShadow = true;
-        body.add(head);
+        // Ojos grandes y juzgadores
+        const eye = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.1), matWhite);
+        eye.position.set(0.15, 0.1, 0.3);
+        body.add(eye);
+        const eye2 = eye.clone();
+        eye2.position.set(-0.15, 0.1, 0.3);
+        body.add(eye2);
+
+        // Pico
+        const beak = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 4), matBeak);
+        beak.rotation.x = Math.PI / 2;
+        beak.position.set(0, -0.1, 0.4);
+        body.add(beak);
+
+        // Alas
+        const wingGeo = new THREE.BoxGeometry(0.6, 0.1, 0.3);
+        this.wingL = new THREE.Mesh(wingGeo, matBlue);
+        this.wingL.position.set(0.4, 0, 0);
+        body.add(this.wingL);
+
+        this.wingR = new THREE.Mesh(wingGeo, matBlue);
+        this.wingR.position.set(-0.4, 0, 0);
+        body.add(this.wingR);
+
+        this.bodyRef = body;
     }
 
-    /*
+    // 3. EL CLIENTE (El Muro de Ladrillos / Traje)
+    // Aspecto: Cuadrado, masivo, con teléfono gigante
+    createClient() {
+        const matSuit = new THREE.MeshStandardMaterial({ color: 0x4b0082, flatShading: true }); // Indigo
+        const matSkin = new THREE.MeshStandardMaterial({ color: this.colors.skin, flatShading: true });
+        const matPhone = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
 
-    createBoss() {
-        const matGold = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2 });
-        const matDollar = new THREE.MeshStandardMaterial({ color: 0x85bb65 });
-
-        const body = new THREE.Mesh(geoBossBody, matGold);
-        body.position.y = 1;
+        // Cuerpo (Un bloque sólido)
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.5), matSuit);
+        body.position.y = 0.7;
         body.castShadow = true;
         this.mesh.add(body);
 
-        const head = new THREE.Mesh(geoBossHead, matGold);
-        head.position.y = 1.5;
-        head.castShadow = true;
+        // Cabeza (Pequeña en comparación)
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), matSkin);
+        head.position.y = 0.6;
         body.add(head);
 
-        const wingL = new THREE.Mesh(geoBossWing, matDollar);
-        wingL.position.set(-1, 1, -0.5);
-        wingL.rotation.z = 0.5;
-        body.add(wingL);
-
-        const wingR = new THREE.Mesh(geoBossWing, matDollar);
-        wingR.position.set(1, 1, -0.5);
-        wingR.rotation.z = -0.5;
-        body.add(wingR);
-    }
-
-    */
-
-    /*
-    createBoss() {
-        // Definición de Geometrías (Usaremos Box/Cylinder/Sphere para el ejemplo)
-        const geoSuitBody = new THREE.BoxGeometry(1.5, 2.5, 1);
-        const geoHead = new THREE.SphereGeometry(0.7, 16, 16);
-        const geoBriefcase = new THREE.BoxGeometry(0.8, 0.6, 0.3);
-        const geoArm = new THREE.BoxGeometry(0.3, 1, 0.3);
-        const geoTie = new THREE.BoxGeometry(0.3, 0.8, 0.1);
-        const geoHalo = new THREE.CylinderGeometry(2.5, 2.5, 0.1, 32);
-
-        // Definición de Materiales
-        const matSuit = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.1, roughness: 0.7 }); // Traje negro
-        const matSkin = new THREE.MeshStandardMaterial({ color: 0xf5deb3 }); // Color de piel
-        const matTie = new THREE.MeshStandardMaterial({ color: 0xcc0000, metalness: 0.0, roughness: 0.4 }); // Corbata roja
-        const matGold = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.9, roughness: 0.1 }); // Oro/Metal para el maletín
-        const matEquityDrain = new THREE.MeshBasicMaterial({ color: 0x8a2be2, transparent: true, opacity: 0.4, side: THREE.DoubleSide }); // Púrpura para el drenaje de equity
-
-        // 1. Cuerpo (Traje)
-        const body = new THREE.Mesh(geoSuitBody, matSuit);
-        body.position.y = 1.25;
-        body.castShadow = true;
-        this.mesh.add(body);
-
-        // 2. Cabeza (con gafas/aspecto de élite)
-        const head = new THREE.Mesh(geoHead, matSkin);
-        head.position.y = 1.8;
-        head.castShadow = true;
-        body.add(head);
-
-        // 2.1. Detalle: Gafas de Sol
-        const geoGlassesFrame = new THREE.BoxGeometry(1.6, 0.2, 0.1);
-        const matGlasses = new THREE.MeshBasicMaterial({ color: 0x000000 });
-        const glasses = new THREE.Mesh(geoGlassesFrame, matGlasses);
-        glasses.position.set(0, 0.05, 0.6);
-        head.add(glasses);
-
-        // 2.2. Detalle: Corbata
-        const tie = new THREE.Mesh(geoTie, matTie);
-        tie.position.set(0, -0.6, 0.55);
-        body.add(tie);
-
-        // 3. Brazo y Maletín
-        const armR = new THREE.Mesh(geoArm, matSuit);
-        armR.position.set(0.9, 0, 0); // Posición relativa al cuerpo
+        // Brazo derecho sosteniendo teléfono
+        const armR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), matSuit);
+        armR.position.set(-0.5, 0, 0);
+        armR.rotation.z = -2.5; // Brazo arriba hacia la oreja
         body.add(armR);
 
-        // 3.1. El Maletín (símbolo de su riqueza/poder)
-        const briefcase = new THREE.Mesh(geoBriefcase, matGold);
-        briefcase.position.set(0.5, -0.5, 0); // Sostenido por el brazo derecho
-        briefcase.rotation.y = Math.PI / 4;
-        armR.add(briefcase);
+        // Teléfono gigante
+        const phone = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.05), matPhone);
+        phone.position.set(0, -0.3, 0);
+        armR.add(phone);
 
-
-        // 4. Halo de Drenaje (El área de efecto del daño de Equity)
-        // Esto es crucial para el gameplay, un cilindro transparente que marca la zona de peligro.
-        const drainHalo = new THREE.Mesh(geoHalo, matEquityDrain);
-        drainHalo.position.y = 0.05; // Justo por encima del suelo
-        this.mesh.add(drainHalo);
-
-        // Opcional: Rotación animada del maletín o el halo en el loop de actualización para hacerlo dinámico
+        this.bodyRef = body;
     }
-        */
 
+    // 4. EL JEFE (Mantenemos tu diseño épico, optimizado)
     createBoss() {
-        // --- MATERIALES (La clave del estilo Low Poly es flatShading: true) ---
-        const matSuitDark = new THREE.MeshStandardMaterial({
-            color: 0x2c3e50, // Azul marino oscuro corporativo
-            roughness: 0.7,
-            flatShading: true // <--- ESTO da el look "low poly" de tu imagen
-        });
+        const matSuitDark = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.7, flatShading: true });
+        const matTie = new THREE.MeshStandardMaterial({ color: 0xe74c3c, emissive: 0x500000, flatShading: true });
+        const matSkin = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.5, flatShading: true });
+        const matGold = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.8, roughness: 0.2, flatShading: true });
 
-        const matShirt = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            flatShading: true
-        });
+        // Grupo base del Jefe
+        const bossGroup = new THREE.Group();
+        bossGroup.position.y = 0;
+        this.mesh.add(bossGroup);
 
-        const matTie = new THREE.MeshStandardMaterial({
-            color: 0xe74c3c, // Rojo agresivo
-            emissive: 0x500000, // Un ligero brillo maligno
-            flatShading: true
-        });
-
-        const matSkin = new THREE.MeshStandardMaterial({
-            color: 0xffccaa,
-            roughness: 0.5,
-            flatShading: true
-        });
-
-        const matGold = new THREE.MeshStandardMaterial({
-            color: 0xffd700,
-            metalness: 0.8,
-            roughness: 0.2,
-            flatShading: true
-        });
-
-        // --- JERARQUÍA DEL CUERPO ---
-
-        // 1. TORSO (Grande y triangular, como un gorila)
-        // CylinderGeometry(radioTop, radioBottom, height, segmentos) -> segmentos bajos = look angular
-        const geoTorso = new THREE.CylinderGeometry(1.8, 1.0, 2.5, 5);
-        const torso = new THREE.Mesh(geoTorso, matSuitDark);
+        // TORSO
+        const torso = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.0, 2.5, 5), matSuitDark);
         torso.position.y = 2.5;
         torso.castShadow = true;
-        this.mesh.add(torso);
+        bossGroup.add(torso);
 
-        // 2. CABEZA (Pequeña y angular)
-        const geoHead = new THREE.DodecahedronGeometry(0.6); // Forma geométrica compleja
-        const head = new THREE.Mesh(geoHead, matSkin);
-        head.position.y = 1.5; // Posición relativa al torso (encima)
+        // CABEZA
+        const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.6), matSkin);
+        head.position.y = 1.5;
         torso.add(head);
 
-        // Gafas de realidad mixta (Apple Vision / Meta Quest exagerado - "El Futuro")
-        const geoVisor = new THREE.BoxGeometry(0.9, 0.3, 0.4);
-        const matVisor = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 0.9, roughness: 0.1 });
-        const visor = new THREE.Mesh(geoVisor, matVisor);
+        // Gafas VR
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.3, 0.4), new THREE.MeshStandardMaterial({ color: 0x000000 }));
         visor.position.set(0, 0.1, 0.4);
         head.add(visor);
 
-        // 3. BRAZOS (Masivos, separados del cuerpo estilo Rayman o unidos por juntas invisibles)
-
-        // Hombros (Hombreras del traje exageradas)
-        const geoShoulder = new THREE.OctahedronGeometry(0.9);
-
-        // Brazo Izquierdo
-        const shoulderL = new THREE.Mesh(geoShoulder, matSuitDark);
-        shoulderL.position.set(-1.6, 0.8, 0);
-        torso.add(shoulderL);
-
+        // BRAZOS
         const geoArm = new THREE.CylinderGeometry(0.5, 0.3, 1.5, 4);
+
+        // Izquierdo
         const armL = new THREE.Mesh(geoArm, matSuitDark);
-        armL.position.y = -1;
-        shoulderL.add(armL);
+        armL.position.set(-1.6, 0.8, 0);
+        armL.rotation.z = -0.5;
+        torso.add(armL);
 
-        // Puño Izquierdo (Caja fuerte/Guantelete)
-        const geoFist = new THREE.DodecahedronGeometry(0.5);
-        const fistL = new THREE.Mesh(geoFist, matSkin);
-        fistL.position.y = -0.9;
-        armL.add(fistL);
-
-        // Brazo Derecho (El brazo del castigo)
-        const shoulderR = new THREE.Mesh(geoShoulder, matSuitDark);
-        shoulderR.position.set(1.6, 0.8, 0);
-        torso.add(shoulderR);
-
+        // Derecho (Con Pluma/Lanza)
         const armR = new THREE.Mesh(geoArm, matSuitDark);
-        armR.position.y = -1;
-        shoulderR.add(armR);
+        armR.position.set(1.6, 0.8, 0);
+        armR.rotation.z = 0.5;
+        torso.add(armR);
 
-        // ARMA: "La Pluma Estilográfica Gigante" (o un mazo de Term Sheet)
-        // Vamos a hacer una Pluma Dorada que usa como lanza
-        const geoPen = new THREE.CylinderGeometry(0.1, 0.05, 2.5, 6);
-        const pen = new THREE.Mesh(geoPen, matGold);
-        pen.rotation.x = Math.PI / 2; // Apuntando hacia adelante
-        pen.position.set(0, -1, 1); // Sostenida en la mano
+        // Arma
+        const pen = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.05, 3.5, 6), matGold);
+        pen.rotation.x = Math.PI / 2;
+        pen.position.set(0, -1, 1);
         armR.add(pen);
 
-        // Punta de la pluma (peligrosa)
-        const geoTip = new THREE.ConeGeometry(0.15, 0.5, 8);
-        const tip = new THREE.Mesh(geoTip, matTie); // Roja por la "tinta/sangre"
-        tip.position.y = 1.5; // Punta de la pluma
-        pen.add(tip);
+        this.bodyRef = torso; // Para animar flotación
+        this.wingL = armL; // Reusamos variables para animar brazos
+        this.wingR = armR;
+    }
 
-        // 4. CORBATA DE PODER (Flotando ligeramente)
-        const geoTieC = new THREE.ConeGeometry(0.4, 1.2, 4);
-        const tie = new THREE.Mesh(geoTieC, matTie);
-        tie.rotation.z = Math.PI; // Invertir cono
-        tie.position.set(0, 0, 0.9); // En el pecho
-        tie.scale.z = 0.2; // Aplanarla
-        torso.add(tie);
+    // 5. VC TÓXICO (Velocista)
+    // Aspecto: Traje verde neón, gafas de sol, actitud agresiva
+    createToxicVC() {
+        const matSuit = new THREE.MeshStandardMaterial({ color: 0x222222, flatShading: true });
+        const matToxic = new THREE.MeshStandardMaterial({ color: this.colors.toxic, emissive: 0x004400, flatShading: true });
+        const matSkin = new THREE.MeshStandardMaterial({ color: this.colors.skin, flatShading: true });
 
-        // 5. AURA DE "VALUATION CAP" (Visualización del rango de ataque)
-        const geoAura = new THREE.RingGeometry(3.5, 3.8, 32);
-        const matAura = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
-        const aura = new THREE.Mesh(geoAura, matAura);
-        aura.rotation.x = -Math.PI / 2; // Acostado en el suelo
-        aura.position.y = -2.4; // A nivel de suelo relativo al torso
-        torso.add(aura);
+        // Cuerpo delgado y aerodinámico
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.2), matSuit);
+        body.position.y = 0.6;
+        body.rotation.x = 0.4; // Inclinado hacia adelante (corriendo)
+        body.castShadow = true;
+        this.mesh.add(body);
 
-        // Referencia para animaciones
-        this.torso = torso;
-        this.shoulderR = shoulderR;
-        this.shoulderL = shoulderL;
+        // Cabeza
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), matSkin);
+        head.position.set(0, 0.4, 0.1);
+        body.add(head);
+
+        // Gafas de sol (Tóxicas)
+        const glasses = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.1), matToxic);
+        glasses.position.set(0, 0.05, 0.1);
+        head.add(glasses);
+
+        // Maletín (lleno de cláusulas abusivas)
+        const briefcase = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.3, 0.4), matToxic);
+        briefcase.position.set(0.3, -0.1, 0);
+        body.add(briefcase);
+
+        this.bodyRef = body;
+    }
+
+    // 6. REGULADOR (El Tanque Burocrático)
+    // Aspecto: Muro con patas, escudo GDPR
+    createRegulator() {
+        const matUniform = new THREE.MeshStandardMaterial({ color: this.colors.regulator, flatShading: true });
+        const matShield = new THREE.MeshStandardMaterial({ color: 0x3333cc, metalness: 0.5, roughness: 0.2 });
+        const matText = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+        // Cuerpo masivo (Cubo grande)
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 0.6), matUniform);
+        body.position.y = 0.8;
+        body.castShadow = true;
+        this.mesh.add(body);
+
+        // Cabeza (Pequeña, casco)
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.3), matUniform);
+        head.position.y = 0.6;
+        body.add(head);
+
+        // Escudo GDPR Gigante
+        const shield = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.8, 0.1), matShield);
+        shield.position.set(0, 0, 0.4);
+        body.add(shield);
+
+        this.bodyRef = body;
     }
 
     update(dt, playerPos) {
         if (this.isDead) return;
 
-        const dir = new THREE.Vector3()
-            .subVectors(playerPos, this.mesh.position)
-            .normalize();
-
-        this.mesh.position.add(dir.multiplyScalar(this.speed * dt));
+        // 1. Movimiento
+        _tempVec.subVectors(playerPos, this.mesh.position).normalize();
+        this.mesh.position.add(_tempVec.multiplyScalar(this.speed * dt));
         this.mesh.lookAt(playerPos.x, 0, playerPos.z);
 
-        // Simple Animations
-        if (this.type === 'intern' && this.propeller) {
-            this.propeller.rotation.y += dt * 10; // Spin propeller
-        }
+        // 2. Animaciones Procedurales por Tipo
+        const time = Date.now() * 0.001 + this.animOffset;
 
-        // Bobbing for all
-        this.mesh.position.y = Math.abs(Math.sin(Date.now() * 0.005 * this.speed)) * 0.2;
+        if (this.type === 'intern') {
+            // Efecto Cafeína: Vibración rápida
+            this.bodyRef.position.x = Math.sin(time * 50) * 0.05;
+            // Correr
+            this.mesh.position.y = Math.abs(Math.sin(time * 15)) * 0.2;
+        }
+        else if (this.type === 'troll') {
+            // Aleteo
+            const wingSpeed = Math.sin(time * 20);
+            this.wingL.rotation.z = wingSpeed * 0.5;
+            this.wingR.rotation.z = -wingSpeed * 0.5;
+            // Flotar agresivo
+            this.mesh.position.y = 2 + Math.sin(time * 5) * 0.5;
+        }
+        else if (this.type === 'client') {
+            // Caminar pesado (Wobble)
+            this.mesh.rotation.z = Math.sin(time * 5) * 0.1;
+            this.mesh.position.y = 0.7 + Math.abs(Math.sin(time * 5)) * 0.1;
+        }
+        else if (this.type === 'boss') {
+            // Respiración amenazante
+            this.bodyRef.position.y = 2.5 + Math.sin(time * 2) * 0.2;
+            // Brazos moviéndose lentamente
+            this.wingL.rotation.x = Math.sin(time) * 0.2;
+            this.wingR.rotation.x = Math.cos(time) * 0.2;
+        }
+        else if (this.type === 'toxic_vc') {
+            // Correr muy rápido
+            this.bodyRef.position.y = 0.6 + Math.abs(Math.sin(time * 20)) * 0.1;
+            this.bodyRef.rotation.z = Math.sin(time * 10) * 0.1;
+        }
+        else if (this.type === 'regulator') {
+            // Paso lento y pesado
+            this.bodyRef.position.y = 0.8 + Math.abs(Math.sin(time * 3)) * 0.05;
+            this.bodyRef.rotation.z = Math.sin(time * 3) * 0.05;
+        }
     }
 
     getPosition() {
@@ -379,13 +395,21 @@ export class Enemy {
             this.isDead = true;
             this.scene.remove(this.mesh);
         } else {
-            // Flash white
+            // Flash white (Feedback visual de daño)
             this.mesh.traverse((child) => {
                 if (child.isMesh) {
-                    const oldColor = child.material.color.getHex();
-                    child.material.color.setHex(0xffffff);
+                    // Guardamos el color original si no existe
+                    if (!child.userData.originalColor) {
+                        child.userData.originalColor = child.material.color.getHex();
+                    }
+
+                    child.material.color.setHex(0xffffff); // Blanco flash
+
+                    // Restaurar color
                     setTimeout(() => {
-                        if (!this.isDead && child.material) child.material.color.setHex(oldColor);
+                        if (!this.isDead && child.material) {
+                            child.material.color.setHex(child.userData.originalColor);
+                        }
                     }, 50);
                 }
             });

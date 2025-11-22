@@ -1,136 +1,122 @@
 import * as THREE from 'three';
 
 export class Player {
-    constructor(scene) {
+    // Añadimos valores por defecto a bounds para evitar el error "undefined"
+    constructor(scene, bounds = { minX: -50, maxX: 50, minZ: -50, maxZ: 50 }) {
         this.scene = scene;
-        this.mesh = null;
+        this.bounds = bounds;
 
-        // Parts for animation
-        this.head = null;
-        this.body = null;
-        this.armL = null;
-        this.armR = null;
-        this.legL = null;
-        this.legR = null;
-
-        // Stats
+        // Estadísticas de Juego (Requeridas por Game.js)
         this.speed = 10;
         this.cash = 10000;
-        this.hype = 50;
         this.equity = 100;
-
-        // Leveling
+        this.hype = 50;
         this.level = 1;
         this.xp = 0;
         this.xpToNextLevel = 100;
+        this.isDead = false;
 
         this.init();
     }
 
     init() {
-        // Create a Group for the character
+        // 1. Grupo Principal
         this.mesh = new THREE.Group();
+        this.mesh.position.set(0, 0.5, 0);
         this.mesh.castShadow = true;
         this.scene.add(this.mesh);
 
-        const materialSkin = new THREE.MeshStandardMaterial({ color: 0xffccaa }); // Skin
-        const materialHoodie = new THREE.MeshStandardMaterial({ color: 0x00aaff }); // Blue Hoodie
-        const materialPants = new THREE.MeshStandardMaterial({ color: 0x222222 }); // Dark Jeans
-        const materialShoes = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White Sneakers
+        // --- MATERIALES (Estilo Founder) ---
+        const matSkin = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.5 });
+        const matHoodie = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 }); // Gris oscuro
+        const matJeans = new THREE.MeshStandardMaterial({ color: 0x3b5998, roughness: 0.8 });
+        const matLaptop = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.7, roughness: 0.2 });
+        const matScreen = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0x4444ff, emissiveIntensity: 0.5 });
 
-        // 1. Body (Hoodie)
-        const bodyGeo = new THREE.BoxGeometry(0.6, 0.7, 0.4);
-        this.body = new THREE.Mesh(bodyGeo, materialHoodie);
-        this.body.position.y = 1.1;
+        // --- GEOMETRÍA VÓXEL ---
+
+        // A. TORSO (Sudadera)
+        this.body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.3), matHoodie);
+        this.body.position.y = 0.8;
         this.body.castShadow = true;
         this.mesh.add(this.body);
 
-        // 2. Head
-        const headGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
-        this.head = new THREE.Mesh(headGeo, materialSkin);
-        this.head.position.y = 0.6; // Relative to body
-        this.body.add(this.head);
+        // B. CABEZA (Hijo del torso)
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0, 0.5, 0);
+        this.body.add(headGroup);
 
-        // Glasses
-        const glassesGeo = new THREE.BoxGeometry(0.42, 0.1, 0.1);
-        const glassesMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-        const glasses = new THREE.Mesh(glassesGeo, glassesMat);
-        glasses.position.set(0, 0.05, 0.2);
-        this.head.add(glasses);
+        this.head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), matSkin);
+        this.head.position.z = 0.05;
+        headGroup.add(this.head);
 
-        // 3. Arms
-        const armGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+        // Capucha
+        const hoodBack = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.1), matHoodie);
+        hoodBack.position.set(0, 0.02, -0.15);
+        headGroup.add(hoodBack);
+        const hoodTop = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.1, 0.35), matHoodie);
+        hoodTop.position.set(0, 0.2, -0.02);
+        headGroup.add(hoodTop);
 
-        // Left Arm (Holding Laptop)
-        this.armL = new THREE.Mesh(armGeo, materialHoodie);
-        this.armL.position.set(0.4, 0.2, 0);
+        // C. BRAZOS
+        const armGeo = new THREE.BoxGeometry(0.15, 0.5, 0.15);
+
+        // Brazo Izquierdo
+        this.armL = new THREE.Mesh(armGeo, matHoodie);
+        this.armL.position.set(0.35, 0, 0);
         this.body.add(this.armL);
+        const handL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), matSkin);
+        handL.position.y = -0.3;
+        this.armL.add(handL);
 
-        // Laptop
-        const laptopGeo = new THREE.BoxGeometry(0.4, 0.05, 0.3);
-        const laptopMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-        const laptop = new THREE.Mesh(laptopGeo, laptopMat);
-        laptop.position.set(0, -0.3, 0.2); // In hand
-        this.armL.add(laptop);
-
-        // Screen open
-        const screenGeo = new THREE.BoxGeometry(0.4, 0.3, 0.02);
-        const screenMat = new THREE.MeshStandardMaterial({ color: 0x2222ff, emissive: 0x0000aa });
-        const screen = new THREE.Mesh(screenGeo, screenMat);
-        screen.position.set(0, 0.15, -0.15);
-        screen.rotation.x = 0.5;
-        laptop.add(screen);
-
-        // Right Arm
-        this.armR = new THREE.Mesh(armGeo, materialHoodie);
-        this.armR.position.set(-0.4, 0.2, 0);
+        // Brazo Derecho (Sosteniendo Laptop)
+        this.armR = new THREE.Mesh(armGeo, matHoodie);
+        this.armR.position.set(-0.35, 0, 0);
+        this.armR.rotation.x = -0.5; // Posición de sostener
         this.body.add(this.armR);
+        const handR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), matSkin);
+        handR.position.y = -0.3;
+        this.armR.add(handR);
 
-        // 4. Legs
-        const legGeo = new THREE.BoxGeometry(0.25, 0.7, 0.25);
+        // D. LAPTOP (En mano derecha)
+        const laptopGroup = new THREE.Group();
+        laptopGroup.position.set(0, -0.35, 0.15);
+        this.armR.add(laptopGroup);
 
-        this.legL = new THREE.Mesh(legGeo, materialPants);
-        this.legL.position.set(0.2, 0.4, 0); // Relative to mesh origin (0,0,0 is feet)
-        this.mesh.add(this.legL);
+        const lapBase = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.02, 0.3), matLaptop);
+        laptopGroup.add(lapBase);
 
-        this.legR = new THREE.Mesh(legGeo, materialPants);
-        this.legR.position.set(-0.2, 0.4, 0);
-        this.mesh.add(this.legR);
+        const screenGroup = new THREE.Group();
+        screenGroup.position.set(0, 0.01, -0.15);
+        screenGroup.rotation.x = 0.5; // Abierta
+        laptopGroup.add(screenGroup);
+
+        const lapScreenFrame = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.02, 0.3), matLaptop);
+        lapScreenFrame.position.set(0, 0, 0.15);
+        lapScreenFrame.rotation.x = -Math.PI / 2;
+        screenGroup.add(lapScreenFrame);
+
+        const lapGlow = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.25), matScreen);
+        lapGlow.position.set(0, 0.011, 0.15);
+        lapGlow.rotation.x = -Math.PI / 2;
+        screenGroup.add(lapGlow);
+
+        // E. PIERNAS
+        const legGeo = new THREE.BoxGeometry(0.2, 0.65, 0.2);
+        this.legL = new THREE.Mesh(legGeo, matJeans);
+        this.legL.position.set(0.15, -0.6, 0);
+        this.body.add(this.legL);
+
+        this.legR = new THREE.Mesh(legGeo, matJeans);
+        this.legR.position.set(-0.15, -0.6, 0);
+        this.body.add(this.legR);
     }
 
-    update(dt, inputHandler, officeLevel) {
-        const move = inputHandler.getMovementVector();
-        const isMoving = move.x !== 0 || move.z !== 0;
+    // --- MÉTODOS DE INTERFAZ REQUERIDOS POR GAME.JS ---
 
-        if (isMoving) {
-            const oldPos = this.mesh.position.clone();
-
-            this.mesh.position.x += move.x * this.speed * dt;
-            this.mesh.position.z += move.z * this.speed * dt;
-
-            // Collision Check
-            if (officeLevel && officeLevel.checkCollision(this.mesh.position, 0.5)) {
-                this.mesh.position.copy(oldPos);
-            }
-
-            // Rotate to face movement direction
-            const angle = Math.atan2(move.x, move.z);
-            this.mesh.rotation.y = angle;
-
-            // Procedural Animation (Walk Cycle)
-            const time = Date.now() * 0.01;
-            this.legL.rotation.x = Math.sin(time) * 0.5;
-            this.legR.rotation.x = Math.sin(time + Math.PI) * 0.5;
-
-            this.armL.rotation.x = Math.sin(time + Math.PI) * 0.3; // Opposite to leg
-            this.armR.rotation.x = Math.sin(time) * 0.3;
-        } else {
-            // Reset pose
-            this.legL.rotation.x = 0;
-            this.legR.rotation.x = 0;
-            this.armL.rotation.x = 0;
-            this.armR.rotation.x = 0;
-        }
+    // Restaurado: Game.js llama a esto, no a un getter
+    getPosition() {
+        return this.mesh.position;
     }
 
     getFacingDirection() {
@@ -138,15 +124,69 @@ export class Player {
         return new THREE.Vector3(Math.sin(rotation), 0, Math.cos(rotation));
     }
 
+    // Restaurado: El orden de argumentos es (delta, inputHandler, levelObstacles)
+    update(dt, inputHandler, levelObstacles) {
+        if (this.isDead) return;
+
+        const moveVector = inputHandler.getMovementVector();
+
+        if (moveVector.x !== 0 || moveVector.z !== 0) {
+            const oldPos = this.mesh.position.clone();
+
+            this.mesh.position.x += moveVector.x * this.speed * dt;
+            this.mesh.position.z += moveVector.z * this.speed * dt;
+
+            // Límites del mapa
+            this.mesh.position.x = Math.max(this.bounds.minX, Math.min(this.bounds.maxX, this.mesh.position.x));
+            this.mesh.position.z = Math.max(this.bounds.minZ, Math.min(this.bounds.maxZ, this.mesh.position.z));
+
+            // Colisiones con obstáculos (si existen)
+            if (levelObstacles && levelObstacles.checkCollision(this.mesh.position, 0.5)) {
+                this.mesh.position.copy(oldPos);
+            }
+
+            // Rotación suave hacia la dirección de movimiento
+            const angle = Math.atan2(moveVector.x, moveVector.z);
+            this.mesh.rotation.y = angle;
+
+            // Animación de caminar
+            const time = Date.now() * 0.01;
+            this.legL.rotation.x = Math.sin(time) * 0.5;
+            this.legR.rotation.x = Math.sin(time + Math.PI) * 0.5;
+            this.armL.rotation.x = Math.sin(time + Math.PI) * 0.3;
+            // Animación sutil del brazo con laptop
+            this.armR.rotation.x = -0.5 + Math.sin(time) * 0.1;
+        } else {
+            // Resetear pose (Idle)
+            this.legL.rotation.x = 0;
+            this.legR.rotation.x = 0;
+            this.armL.rotation.x = 0;
+            this.armR.rotation.x = -0.5;
+        }
+    }
+
     takeDamage(amount) {
         this.cash -= amount;
+        // Efecto visual de daño (parpadeo rojo opcional)
+        if (this.body) {
+            const oldColor = this.body.material.color.getHex();
+            this.body.material.color.setHex(0xff0000);
+            setTimeout(() => {
+                if (this.body) this.body.material.color.setHex(oldColor);
+            }, 100);
+        }
+    }
+
+    takeHypeDamage(amount) {
+        this.hype -= amount;
+        if (this.hype < 0) this.hype = 0;
     }
 
     gainXP(amount) {
         this.xp += amount;
         if (this.xp >= this.xpToNextLevel) {
             this.levelUp();
-            return true; // Signal level up
+            return true;
         }
         return false;
     }
@@ -155,11 +195,6 @@ export class Player {
         this.level++;
         this.xp -= this.xpToNextLevel;
         this.xpToNextLevel = Math.floor(this.xpToNextLevel * 1.5);
-        console.log(`Level Up! Now Level ${this.level}`);
-    }
-
-    getPosition() {
-        return this.mesh.position;
     }
 
     dilute() {
@@ -171,9 +206,12 @@ export class Player {
         return false;
     }
 
-    takeHypeDamage(amount) {
-        this.hype -= amount;
-        if (this.hype < 0) this.hype = 0;
-        // TODO: Apply debuff if hype is 0
+    loseEquityPercent(percent) {
+        const amount = this.equity * (percent / 100);
+        this.equity = Math.max(0, this.equity - amount);
+    }
+
+    getValuation() {
+        return this.xp * 100 * (this.hype / 50);
     }
 }
